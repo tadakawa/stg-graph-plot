@@ -1,22 +1,27 @@
+import datetime
+import os
+import re
+import threading
+import time
 import tkinter as tk
-from tkinter import filedialog
-from tkinter import messagebox
 import tkinter.scrolledtext as tkst
 import tkinter.ttk as ttk
-import os
-import pandas as pd
-import time
-import re
-import matplotlib
-import matplotlib.pyplot as plt
+from tkinter import filedialog, messagebox
 
+import matplotlib.pyplot as plt
+import pandas as pd
+
+__version__ = '1.0.0'
 plt.style.use('ggplot')
 font = {'family': 'meiryo'}
-matplotlib.rc('font', **font)
+plt.rc('font', **font)
 
 # 集計単位の選択肢
 MEAN_TIMES = {
     '生データ': 'org',
+    '10秒平均': '10S',
+    '15秒平均': '15S',
+    '30秒平均': '30S',
     '1分平均': '1T',
     '2分平均': '2T',
     '5分平均': '5T',
@@ -31,9 +36,12 @@ MEAN_TIMES = {
 }
 
 
-# ==============================
-# LabelFrame
-# ==============================
+def now(format: str = '%Y-%m-%d %H:%M:%S') -> str:
+    """現在時刻文字列を返す
+    """
+    return datetime.datetime.now().strftime(format)
+
+
 class MyLabelFrame(tk.LabelFrame):
     def __init__(self, master=None, **kwargs):
         super().__init__(
@@ -54,10 +62,9 @@ class MyLabelFrame(tk.LabelFrame):
         )
 
 
-# ==============================
-# Combobox（リスト）
-# ==============================
 class MyCombobox(ttk.Combobox):
+    """Combobox（リスト）
+    """
     def __init__(self, master=None, **kwargs):
         super().__init__(
             master=master,
@@ -67,10 +74,9 @@ class MyCombobox(ttk.Combobox):
         self.config(**kwargs)  # 指定オプションの設定
 
 
-# ==============================
-# Spinbox（増減ボタンありのEntry）
-# ==============================
 class MySpinbox(ttk.Spinbox):
+    """Spinbox（増減ボタンありのEntry）
+    """
     def __init__(self, master=None, **kwargs):
         super().__init__(
             master=master,
@@ -79,10 +85,9 @@ class MySpinbox(ttk.Spinbox):
         self.config(**kwargs)  # 指定オプションの設定
 
 
-# ==============================
-# ScrolledText
-# ==============================
 class MyScrolledText(tkst.ScrolledText):
+    """スクロールするテキストウィジェット
+    """
     def __init__(self, master=None, **kwargs):
         super().__init__(
             master=master,
@@ -100,57 +105,71 @@ class MyScrolledText(tkst.ScrolledText):
             **kwargs,
         )
 
-    def write(self, text):
+    def write(self, text: str):
+        """テキストメッセージの追記
+            末尾に追記し、最終行にスクロールする
+
+        Args:
+            text (str): 追記するテキスト
+        """
         self['state'] = 'normal'
         self.insert('end', text)
         self['state'] = 'disabled'
         self.see('end')
 
 
-# ============================================================
 class InformationFrame(MyLabelFrame):
-    '''情報表示用フレーム
-    '''
-    def __init__(self, master=None, **kwargs):
-        self.widget = []
-        super().__init__(master, **kwargs)
-
-    def write(self, msg):
-        '''リスト msg の内容を新しいLabelを作成して配置する
-        '''
-        # 古いラベルを削除する
-        [w.destroy() for w in self.widget]
-        # 新しいラベルを作成
-        self.widget = [tk.Label(self, text=s, anchor=tk.W) for s in msg]
+    """情報表示用フレーム
+        Labelを持つフレーム
+    """
+    def __init__(self, lines: int, master=None, **kwargs):
+        """初期化
+            ラベルをlines個作成し縦に配置する。
+        Args:
+            lines (int): ラベルの個数
+        """
+        super().__init__(master=master, **kwargs)
+        # ラベルの配置
+        self.widget = [tk.Label(self, text='', anchor=tk.W) for i in range(lines)]
         [w.pack(fill=tk.X) for w in self.widget]
 
+    def write(self, msg: list):
+        """ラベルへのテキスト設定
+            すべてのラベルのtextを消去してからmsgに書き換える
 
-# ============================================================
+        Args:
+            msg (list): メッセージ文字列のリスト
+        """
+        [w.config(text='') for w in self.widget]
+        [w.config(text=text) for w, text in zip(self.widget, msg)]
+
+
 class SelectMeanTimeFrame(MyLabelFrame):
-    '''集計単位の選択フレーム
-    '''
+    """集計単位の選択フレーム
+    """
     def __init__(self, master=None, **kwargs):
+        super().__init__(master=master, text='集計単位', **kwargs)
+
         global var_mean_time
         self.var_mean_time = var_mean_time
-        super().__init__(master, text='集計単位', **kwargs)
         self.cb = MyCombobox(
             master=self,
             values=list(MEAN_TIMES.keys()),
             textvariable=self.var_mean_time,
         )
-        self.cb.current(3)         # 初期値を設定
+        self.cb.current(list(MEAN_TIMES.keys()).index('1分平均'))         # 初期値を設定
         self.cb.grid(row=0, column=0)
 
 
-# ============================================================
 class SelectOutputPeriodFrame(MyLabelFrame):
-    '''グラフ出力の対象期間（日付）の選択フレーム
-    '''
+    """グラフ出力の対象期間（日付）の選択フレーム
+    """
     def __init__(self, dates=None, master=None, **kwargs):
+        super().__init__(master=master, text='対象期間', **kwargs)
+
         global var_from, var_to
         self.var_from = var_from
         self.var_to = var_to
-        super().__init__(master, text='対象期間', **kwargs)
 
         # 開始日
         self.cb_from = MyCombobox(
@@ -160,6 +179,9 @@ class SelectOutputPeriodFrame(MyLabelFrame):
         self.cb_from.bind('<MouseWheel>', self.check_var_to)
         self.cb_from.grid(row=0, column=0)
 
+        # 間の '～'
+        tk.Label(master=self, text='～').grid(row=0, column=1)
+
         # 終了日
         self.cb_to = MyCombobox(
             master=self, textvariable=self.var_to, state='disable',
@@ -167,9 +189,6 @@ class SelectOutputPeriodFrame(MyLabelFrame):
         self.cb_to.bind('<<ComboboxSelected>>', self.check_var_from)
         self.cb_to.bind('<MouseWheel>', self.check_var_from)
         self.cb_to.grid(row=0, column=2)
-
-        # 間の '～'
-        tk.Label(master=self, text='～').grid(row=0, column=1)
 
         # 日付の選択肢のセット
         if dates is not None:
@@ -196,18 +215,21 @@ class SelectOutputPeriodFrame(MyLabelFrame):
 
 
 class SelectAxisScaleFrame(MyLabelFrame):
-    '''縦軸のスケールを指定するフレーム'''
+    """縦軸のスケールを指定するフレーム
+    """
     def __init__(self, master=None, **kwargs):
+        super().__init__(master=master, text='縦軸の設定', **kwargs)
+
         global var_axis_unit, var_axis_type, var_axis_value
         self.var_axis_unit = var_axis_unit
         self.var_axis_type = var_axis_type
         self.var_axis_value = var_axis_value
         # 縦軸のスケールの辞書
         self.AXIS_VALUES = {}
-        self.AXIS_VALUES.update({'{} Mbps'.format(i): int(i*1e6) for i in range(1, 10, 1)})
-        self.AXIS_VALUES.update({'{} Mbps'.format(i): int(i*1e6) for i in range(10, 100, 10)})
-        self.AXIS_VALUES.update({'{} Mbps'.format(i): int(i*1e6) for i in range(100, 1000, 100)})
-        self.AXIS_VALUES.update({'{} Gbps'.format(i): int(i*1e9) for i in range(1, 11, 1)})
+        self.AXIS_VALUES.update({f'{i} Mbps': int(i*1e6) for i in range(1, 10, 1)})
+        self.AXIS_VALUES.update({f'{i} Mbps': int(i*1e6) for i in range(10, 100, 10)})
+        self.AXIS_VALUES.update({f'{i} Mbps': int(i*1e6) for i in range(100, 1000, 100)})
+        self.AXIS_VALUES.update({f'{i} Gbps': int(i*1e9) for i in range(1, 11, 1)})
         # 縦軸の単位とspinboxの増分の辞書
         self.AXIS_UNITS = {
             'bps': int(1e3),
@@ -215,8 +237,6 @@ class SelectAxisScaleFrame(MyLabelFrame):
             'Mbps': int(1e6),
             'Gbps': int(1e6),
         }
-
-        super().__init__(master, text='縦軸の設定', **kwargs)
 
         # 子フレーム：単位 ====================
         lf = MyLabelFrame(self, text='単位')
@@ -306,6 +326,8 @@ class SelectAxisScaleFrame(MyLabelFrame):
 
 class ButtonFrame(tk.Frame):
     def __init__(self, target, file_info, period, msg, master=None, **kwargs):
+        super().__init__(master=master)
+
         global var_mean_time, var_axis_unit, var_from, var_to
         self.var_mean_time = var_mean_time
         self.var_axis_unit = var_axis_unit
@@ -315,13 +337,13 @@ class ButtonFrame(tk.Frame):
         self.FileInfoFrame = file_info
         self.PeriodFrame = period
         self.MsgFrame = msg  # メッセージフレーム
-        self.csv_data = pd.DataFrame()
-        super().__init__(master=master)
+        self.df = pd.DataFrame()
         # 読込ボタン
+        width = len('ファイル読込') * 2
         self.ReadButton = tk.Button(
             self,
             text='ファイル読込',
-            width=len('ファイル読込') * 2,
+            width=width,
             command=self.read_stg_thread,
         )
         self.ReadButton.pack(side=tk.LEFT, padx=2, pady=2)
@@ -329,7 +351,7 @@ class ButtonFrame(tk.Frame):
         self.DrawButton = tk.Button(
             self,
             text='グラフ表示',
-            width=len('グラフ表示') * 2,
+            width=width,
             command=self.output_graph,
             state='disable',
         )
@@ -338,6 +360,7 @@ class ButtonFrame(tk.Frame):
         self.QuitButton = tk.Button(
             self,
             text='終了',
+            width=width,
             command=self.abort
         )
         self.QuitButton.pack(side=tk.LEFT, padx=2, pady=2)
@@ -347,7 +370,6 @@ class ButtonFrame(tk.Frame):
         root.destroy()
 
     def read_stg_thread(self):
-        import threading
         th = threading.Thread(target=self.read_stg, args=())
         th.start()
 
@@ -359,6 +381,8 @@ class ButtonFrame(tk.Frame):
         if csv_filenames == '':
             return
 
+        self.MsgFrame.write(f'\n{now()} ファイル読込開始（{len(csv_filenames)} files）\n')
+
         # CSVファイルのチェック
         for idx, filename in enumerate(csv_filenames):
             line = ''
@@ -367,31 +391,31 @@ class ButtonFrame(tk.Frame):
                 with open(filename, 'r', encoding='utf-8') as f:
                     line = f.readline().rstrip()  # 1行読み込み
             except UnicodeDecodeError as err:
-                self.MsgFrame.write('Error!：文字コードエラー\n  {}\n'.format(filename))
-                messagebox.showerror('文字コードエラー', '文字コードがUTF-8ではありません\n{}\n{}'.format(filename, err))
+                self.MsgFrame.write(f'Error!：文字コードエラー\n  {filename}\n')
+                messagebox.showerror('文字コードエラー', f'文字コードがUTF-8ではありません\n{filename}\n{err}')
                 return
-            except Exception as other:
-                self.MsgFrame.write('Error!：ファイルオープンエラー\n  {}\n'.format(filename))
-                messagebox.showerror('ファイルオープンエラー', 'ファイルが開けません\n{}\n{}'.format(filename, other))
+            except Exception as err:
+                self.MsgFrame.write(f'Error!：ファイルオープンエラー\n  {filename}\n')
+                messagebox.showerror('ファイルオープンエラー', f'ファイルが開けません\n{filename}\n{err}')
                 return
 
             # チェック１：STGのファイルであることのチェック
-            # 　　　　　　行頭がSTGでカンマ区切りで5カラムあること
-            columns = re.split(',', line)
-            if len(line) < 3 or line[:3] != 'STG' or len(columns) != 5:
-                self.MsgFrame.write('Error!：ファイルフォーマットエラー\n  {}\n'.format(filename))
+            #   行頭がSTGでカンマ区切りで5カラムあること
+            columns = line.split(',')
+            if line.startswith('STG') is False or len(columns) != 5:
+                self.MsgFrame.write(f'Error!：ファイルフォーマットエラー\n  {filename}\n')
                 messagebox.showerror(
                     'ファイルフォーマットエラー',
-                    'STGのCSVファイルではありません\n{}'.format(filename)
+                    f'STGのCSVファイルではありません\n{filename}'
                 )
                 return
             # ターゲットアドレスを取得
             m = re.match('Target Address:(.+)', columns[1])
             if not m:
-                self.MsgFrame.write('Error!：ファイルフォーマットエラー\n  {}\n'.format(filename))
+                self.MsgFrame.write(f'Error!：ファイルフォーマットエラー\n  {filename}\n')
                 messagebox.showerror(
                     'ファイルフォーマットエラー',
-                    'STGのCSVファイルではありません\n{}'.format(filename)
+                    f'STGのCSVファイルではありません\n{filename}'
                 )
                 return
             self.target_ip = m.group(1)
@@ -400,10 +424,10 @@ class ButtonFrame(tk.Frame):
             if idx == 0:  # ファイル1個目
                 target = columns[1:]
             elif target != columns[1:]:
-                self.MsgFrame.write('Error!：ファイル指定エラー\n  {}\n'.format(filename))
+                self.MsgFrame.write(f'Error!：ファイル指定エラー\n  {filename}\n')
                 messagebox.showerror(
                     'ファイル指定エラー',
-                    '{} の対象情報が一致しません'.format(os.path.basename(filename))
+                    f'{os.path.basename(filename)} の対象情報が一致しません'
                 )
                 return
 
@@ -411,79 +435,73 @@ class ButtonFrame(tk.Frame):
         self.ReadButton['state'] = 'disable'  # ReadButtonをロック
         self.DrawButton['state'] = 'disable'  # DrawButtonをロック
         t = ExecTime()
-        import datetime
-        self.MsgFrame.write(
-            '{} ファイル読込開始（{} files）\n'.format(
-                datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                len(csv_filenames))
-        )
+
+        # CSVファイルをDataFrameとして読み込み、self.dfに結合する
+        self.df = pd.DataFrame()
         for idx, filename in enumerate(csv_filenames):
-            self.MsgFrame.write(
-                ' [{}/{}]：{} ... '.format(idx+1, len(csv_filenames), filename),
-            )
+            self.MsgFrame.write(f' [{idx+1}/{len(csv_filenames)}]：{filename} ... ')
             df = pd.read_csv(
                 filename,
                 encoding='SHIFT-JIS',                       # 文字コードを指定
                 header=1,                                   # 0行目（最初の行）を読み飛ばす
                 names=['date', 'uptime', 'recv', 'send'],   # カラム名を設定
+                usecols=[0, 2, 3],                          # 'uptime' は取り込まない
             )
-            # STGのバグ対応、AugがAvgになっているので置換
+            # STGのバグでAugがAvgになっているので、置換して日時認識しインデックスにする
             df['date'] = pd.to_datetime(df['date'].str.replace('Avg', 'Aug'))
             df.set_index('date', inplace=True)
-            if idx == 0:  # ファイル1個目
-                self.csv_data = df
-            else:        # ファイル2個目以降
-                self.csv_data = pd.concat([self.csv_data, df])
+            self.df = pd.concat([self.df, df])
+            self.MsgFrame.write(f'{t.laptime:.3f} sec\n')
 
-            self.MsgFrame.write(
-                '{:.3f} sec\n'.format(t.laptime)
-            )
+        self.MsgFrame.write(f'{now()} ファイル読込完了\n')
+
         # カレントディレクトの変更
         os.chdir(os.path.dirname(csv_filenames[0]))
-        self.MsgFrame.write(' 出力先：{}\n'.format(os.getcwd()))
-        self.MsgFrame.write(
-            '{} 読込完了\n'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        )
-        self.csv_data.drop_duplicates(inplace=True)                     # 重複行を削除する
-        self.csv_data = self.csv_data.sort_index()                      # インデックス順（日時）でソートする
-        self.csv_data = self.csv_data.query('uptime != 0')              # uptimeが0の行を削除する
-        self.csv_data['delta_time'] = self.csv_data['uptime'].diff()    # delta_timeを計算する。
-        self.csv_data.drop('uptime', axis=1, inplace=True)              # uptimeを削除する
+        self.MsgFrame.write(f' ファイル出力先：{os.getcwd()}\n')
+        # 重複行を削除する
+        self.df.drop_duplicates(inplace=True)
+        # インデックス順（日時）でソートする
+        self.df.sort_index(inplace=True)
+        # 不正データの行を削除する
+        self.df.drop(self.df.query('send == 0 & recv == 0').index, inplace=True)
+        # delta_timeを計算する
+        self.df['delta_time'] = self.df.index.to_series().diff().dt.total_seconds()
 
         # 機器情報出力
         self.TargetFrame.write(target)
         # ファイル情報出力
-        recv = self.csv_data['recv'] * 8 * 100 // self.csv_data['delta_time']
-        send = self.csv_data['send'] * 8 * 100 // self.csv_data['delta_time']
-        delta = self.csv_data['delta_time'] / 100
+        recv = self.df['recv'] * 8 // self.df['delta_time']
+        send = self.df['send'] * 8 // self.df['delta_time']
+        delta = self.df['delta_time']
         text = [
-            '開始日時: {}'.format(str(self.csv_data.index[0])[:-7]),
-            '終了日時: {}'.format(str(self.csv_data.index[-1])[:-7]),
-            '取得間隔: {:,} ～ {:,} 秒'.format(delta.min(), delta.max()),
-            '取得行数: {:,}'.format(self.csv_data.shape[0]),
-            '受信帯域: 最大 {:,} bps'.format(int(recv.max())),
-            '送信帯域: 最大 {:,} bps'.format(int(send.max())),
+            f'開始日時: {str(self.df.index[0])[:-7]}',
+            f'終了日時: {str(self.df.index[-1])[:-7]}',
+            f'取得間隔: {delta.min():,.2} ～ {delta.max():,.2} 秒',
+            f'取得行数: {self.df.shape[0]:,}',
+            f'受信帯域: 最大 {int(recv.max()):,} bps',
+            f'送信帯域: 最大 {int(send.max()):,} bps',
         ]
         self.FileInfoFrame.write(text)
         # 期間情報設定
-        self.PeriodFrame.set_values(sorted(set(self.csv_data.index.date)))
+        self.PeriodFrame.set_values(sorted(set(self.df.index.date)))
 
         self.ReadButton['state'] = 'normal'  # ReadButtonをロック解除
         self.DrawButton['state'] = 'normal'  # DrawButtonをロック解除
 
     def output_graph(self):
-        '''
+        """
         指定の時間でスループットを計算してCSVに吐き出す
         グラフも表示する。
-        '''
+        """
         rule = MEAN_TIMES[self.var_mean_time.get()]
         axis_unit = self.var_axis_unit.get()
 
         # 指定時間で集約
         if rule == 'org':
-            df = self.csv_data.copy()
+            df = self.df.copy()
         else:
-            df = self.csv_data.resample(rule=rule).sum()
+            df = self.df.resample(rule=rule).sum()
+            df['delta_time'] = df.index.to_series().diff().dt.total_seconds()
 
         # 指定期間を抽出
         df = df[self.var_from.get():self.var_to.get()]
@@ -500,12 +518,12 @@ class ButtonFrame(tk.Frame):
 
         recv_unit = 'recv_' + axis_unit
         send_unit = 'send_' + axis_unit
-        df[recv_unit] = df['recv'] * 8 * 100 // df['delta_time'] / div_unit
-        df[send_unit] = df['send'] * 8 * 100 // df['delta_time'] / div_unit
+        df[recv_unit] = df['recv'] * 8 // df['delta_time'] / div_unit
+        df[send_unit] = df['send'] * 8 // df['delta_time'] / div_unit
 
         # CSVファイル出力
         output_columns = ['delta_time', recv_unit, send_unit]
-        df[output_columns].to_csv('{}_{}.csv'.format(self.target_ip, var_mean_time.get()), sep=',')
+        df[output_columns].to_csv(f'{self.target_ip}_{var_mean_time.get()}.csv', sep=',')
 
         # 送受信の最大値と発生日時を調べる
         recv_max = df[recv_unit].max()
@@ -515,38 +533,28 @@ class ButtonFrame(tk.Frame):
 
         # 送受信の最大値の文字列を作成、MbpsとGbpsは少数点3桁表示
         if axis_unit == 'Mbps' or axis_unit == 'Gbps':
-            recv_max_str = '{:,.3f}'.format(recv_max)
-            send_max_str = '{:,.3f}'.format(send_max)
+            recv_max_str = f'{recv_max:,.3f}'
+            send_max_str = f'{send_max:,.3f}'
         else:
-            recv_max_str = '{:,}'.format(int(recv_max))
-            send_max_str = '{:,}'.format(int(send_max))
+            recv_max_str = f'{int(recv_max):,}'
+            send_max_str = f'{int(send_max):,}'
 
         strlen_max = max(len(recv_max_str), len(send_max_str))
 
-        str1 = '受信MAX: {max:>{len}} {unit} ({date})'.format(
-            max=recv_max_str,
-            date=recv_max_date,
-            unit=axis_unit,
-            len=strlen_max,
-        )
-        str2 = '送信MAX: {max:>{len}} {unit} ({date})'.format(
-            max=send_max_str,
-            date=send_max_date,
-            unit=axis_unit,
-            len=strlen_max,
-        )
+        str1 = f'受信MAX: {recv_max_str:>{strlen_max}} {axis_unit} ({recv_max_date})'
+        str2 = f'送信MAX: {send_max_str:>{strlen_max}} {axis_unit} ({send_max_date})'
 
         # グラフ描画
         ax = df.plot(
             grid=True,
             y=[recv_unit, send_unit],
-            title='{} スループット（{}）'.format(self.target_ip, var_mean_time.get())
+            title=f'{self.target_ip} スループット（{var_mean_time.get()}）'
             )
         # X軸ラベル
         ax.set_xlabel('日時')
         # Y軸ラベル
         ax.set_ylabel(axis_unit)
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: '{:,.1f}'.format(x)))
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: f'{x:,.1f}'))
         ax.grid(which='major', color='gray', linestyle='--')
         ax.grid(which='minor', color='gray', linestyle='--')
         # Y軸のスケール
@@ -561,9 +569,8 @@ class ButtonFrame(tk.Frame):
         plt.show()
 
 
-# =================================================================
 class ExecTime():
-    '''コマンドの実行時間を測定する'''
+    """コマンドの実行時間を測定する"""
     def __init__(self, init_time=0):
         self.t1 = time.time() if init_time == 0 else init_time
 
@@ -576,7 +583,7 @@ class ExecTime():
 
     @property
     def print(self):
-        print('{:.3f} sec'.format(self.laptime))
+        print(f'{self.laptime:.3f} sec')
 
 
 # =================================================================
@@ -597,12 +604,11 @@ if __name__ == '__main__':
     # tkinterのウィジェット設定
 
     # 機器情報
-    target_frame = InformationFrame(master=root, text='機器情報')
+    target_frame = InformationFrame(master=root, lines=6, text='機器情報')
     target_frame.grid(row=0, column=0)
 
     # ファイル情報
-    fileinfo_frame = InformationFrame(master=root, text='CSV情報')
-    fileinfo_frame.write(['', '', '', '', '', ''])  # 5行分の空情報を表示
+    fileinfo_frame = InformationFrame(master=root, lines=6, text='CSV情報')
     fileinfo_frame.grid(row=0, column=1)
 
     # 集計単位の選択
@@ -629,7 +635,7 @@ if __name__ == '__main__':
     )
     button_frame.grid(row=4, column=0, columnspan=2, ipady=2, padx=2, pady=2)
 
-    root.title('STG集計ツール')
+    root.title('STG Graph Plot')
     root.resizable(width=False, height=False)
     root.deiconify()
     root.mainloop()
