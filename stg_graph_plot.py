@@ -10,8 +10,12 @@ from tkinter import filedialog, messagebox
 
 import matplotlib.pyplot as plt
 import pandas as pd
+# from matplotlib.backend_bases import key_press_handler
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
+                                               NavigationToolbar2Tk)
+from matplotlib.figure import Figure
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 plt.style.use('ggplot')
 font = {'family': 'meiryo'}
 plt.rc('font', **font)
@@ -54,7 +58,7 @@ class MyLabelFrame(tk.LabelFrame):
 
     def grid(self, **kwargs):
         super().grid(
-            sticky=(tk.N, tk.S, tk.E, tk.W),
+            sticky=tk.NSEW,
             ipady=2,
             padx=2,
             pady=2,
@@ -92,7 +96,7 @@ class MyScrolledText(tkst.ScrolledText):
         super().__init__(
             master=master,
             width=100,
-            state='disabled',
+            state=tk.DISABLED,
         )
         self.config(**kwargs)  # 指定オプションの設定
 
@@ -112,9 +116,9 @@ class MyScrolledText(tkst.ScrolledText):
         Args:
             text (str): 追記するテキスト
         """
-        self['state'] = 'normal'
+        self['state'] = tk.NORMAL
         self.insert('end', text)
-        self['state'] = 'disabled'
+        self['state'] = tk.DISABLED
         self.see('end')
 
 
@@ -173,10 +177,10 @@ class SelectOutputPeriodFrame(MyLabelFrame):
 
         # 開始日
         self.cb_from = MyCombobox(
-            master=self, textvariable=self.var_from, state='disable',
+            master=self, textvariable=self.var_from, state=tk.DISABLED,
         )
         self.cb_from.bind('<<ComboboxSelected>>', self.check_var_to)
-        self.cb_from.bind('<MouseWheel>', self.check_var_to)
+        # self.cb_from.bind('<MouseWheel>', self.check_var_to)
         self.cb_from.grid(row=0, column=0)
 
         # 間の '～'
@@ -184,10 +188,10 @@ class SelectOutputPeriodFrame(MyLabelFrame):
 
         # 終了日
         self.cb_to = MyCombobox(
-            master=self, textvariable=self.var_to, state='disable',
+            master=self, textvariable=self.var_to, state=tk.DISABLED,
         )
         self.cb_to.bind('<<ComboboxSelected>>', self.check_var_from)
-        self.cb_to.bind('<MouseWheel>', self.check_var_from)
+        # self.cb_to.bind('<MouseWheel>', self.check_var_from)
         self.cb_to.grid(row=0, column=2)
 
         # 日付の選択肢のセット
@@ -196,11 +200,11 @@ class SelectOutputPeriodFrame(MyLabelFrame):
 
     def set_values(self, dates):
         self.cb_from['values'] = [str(d) for d in dates]
-        self.cb_from['state'] = 'normal'
+        self.cb_from['state'] = tk.NORMAL
         self.cb_from.current(0)  # 初期値を設定
 
         self.cb_to['values'] = [str(d) for d in dates]
-        self.cb_to['state'] = 'normal'
+        self.cb_to['state'] = tk.NORMAL
         self.cb_to.current(len(dates)-1)  # 初期値を設定
 
     # from の日付が to を超えたら to の値を修正する
@@ -235,7 +239,7 @@ class SelectAxisScaleFrame(MyLabelFrame):
             'bps': int(1e3),
             'kbps': int(100e3),
             'Mbps': int(1e6),
-            'Gbps': int(1e6),
+            'Gbps': int(1e9),
         }
 
         # 子フレーム：単位 ====================
@@ -262,21 +266,21 @@ class SelectAxisScaleFrame(MyLabelFrame):
         self.cb = MyCombobox(
             master=lf,
             values=list(self.AXIS_VALUES.keys()),
-            state='disable',
+            state=tk.DISABLED,
         )
         self.cb.current(9)  # 初期値を指定
         self.cb.bind('<<ComboboxSelected>>', self.set_var_axis_value)
-        self.cb.bind('<MouseWheel>', self.set_var_axis_value)
+        # self.cb.bind('<MouseWheel>', self.set_var_axis_value)
         self.cb.grid(row=1, column=1, sticky=tk.W)
 
         # 2行/2列目、指定値の入力欄
         self.sb = MySpinbox(
-            master=lf, from_=1, to=10e9, increment=1000,
+            master=lf, from_=1e6, to=10e9, increment=self.AXIS_UNITS[self.var_axis_unit.get()],
             textvariable=self.var_axis_value,
             command=self.spin_changed,
-            state='disable',
+            state=tk.DISABLED,
         )
-        self.sb.bind('<MouseWheel>', self.wheel)
+        # self.sb.bind('<MouseWheel>', self.wheel)
         self.sb.grid(row=2, column=1, sticky=tk.W)
         tk.Label(lf, text='bps').grid(row=2, column=2)  # 単位を表示
 
@@ -313,19 +317,19 @@ class SelectAxisScaleFrame(MyLabelFrame):
     # チェックボックスに合わせて他のウィジェットのstateを変更する
     def change_state(self):
         if self.var_axis_type.get() == 'fix':
-            self.cb['state'] = 'readonly'   # cb有効
-            self.sb['state'] = 'disable'    # sb無効
+            self.cb['state'] = 'readonly'
+            self.sb['state'] = tk.DISABLED
             self.set_var_axis_value()
         elif self.var_axis_type.get() == 'specified':
-            self.cb['state'] = 'disable'    # cb無効
-            self.sb['state'] = 'normal'     # sb有効
+            self.cb['state'] = tk.DISABLED
+            self.sb['state'] = tk.NORMAL
         else:
-            self.cb['state'] = 'disable'
-            self.sb['state'] = 'disable'
+            self.cb['state'] = tk.DISABLED
+            self.sb['state'] = tk.DISABLED
 
 
 class ButtonFrame(tk.Frame):
-    def __init__(self, target, file_info, period, msg, master=None, **kwargs):
+    def __init__(self, target, file_info, period, msg, filemenu, master=None, **kwargs):
         super().__init__(master=master)
 
         global var_mean_time, var_axis_unit, var_from, var_to
@@ -337,6 +341,7 @@ class ButtonFrame(tk.Frame):
         self.FileInfoFrame = file_info
         self.PeriodFrame = period
         self.MsgFrame = msg  # メッセージフレーム
+        self.filemenu = filemenu
         self.df = pd.DataFrame()
         # 読込ボタン
         width = len('ファイル読込') * 2
@@ -346,14 +351,23 @@ class ButtonFrame(tk.Frame):
             width=width,
             command=self.read_stg_thread,
         )
-        self.ReadButton.pack(side=tk.LEFT, padx=2, pady=2)
+        # self.ReadButton.pack(side=tk.LEFT, padx=2, pady=2)
+        # プレビューボタン
+        self.PreviewButton = tk.Button(
+            self,
+            text='プレビュー',
+            width=width,
+            command=self.preview_graph,
+            state=tk.DISABLED,
+        )
+        self.PreviewButton.pack(side=tk.LEFT, padx=2, pady=2)
         # 実行ボタン
         self.DrawButton = tk.Button(
             self,
             text='グラフ表示',
             width=width,
             command=self.output_graph,
-            state='disable',
+            state=tk.DISABLED,
         )
         self.DrawButton.pack(side=tk.LEFT, padx=2, pady=2)
         # 終了ボタン
@@ -363,7 +377,7 @@ class ButtonFrame(tk.Frame):
             width=width,
             command=self.abort
         )
-        self.QuitButton.pack(side=tk.LEFT, padx=2, pady=2)
+        # self.QuitButton.pack(side=tk.LEFT, padx=2, pady=2)
 
     def abort(self):
         plt.close('all')
@@ -376,12 +390,13 @@ class ButtonFrame(tk.Frame):
     def read_stg(self):
         # ファイルダイアログを開く
         filetypes = [('STGローテーションファイル', '*.csv;*.csv.*'), ('すべて', '*'), ]
-        csv_filenames = filedialog.askopenfilenames(filetypes=filetypes, initialdir='.')
+        csv_filenames = filedialog.askopenfilenames(filetypes=filetypes, initialdir='.',
+                                                    title='CSVファイルを選択')
         # ファイル指定がなければ終了
         if csv_filenames == '':
             return
 
-        self.MsgFrame.write(f'\n{now()} ファイル読込開始（{len(csv_filenames)} files）\n')
+        self.MsgFrame.write(f'\n{now()} CSVファイル読込開始（{len(csv_filenames)} files）\n')
 
         # CSVファイルのチェック
         for idx, filename in enumerate(csv_filenames):
@@ -432,14 +447,17 @@ class ButtonFrame(tk.Frame):
                 return
 
         # CSVファイルの読込
-        self.ReadButton['state'] = 'disable'  # ReadButtonをロック
-        self.DrawButton['state'] = 'disable'  # DrawButtonをロック
+        self.ReadButton['state'] = tk.DISABLED  # ReadButtonをロック
+        self.DrawButton['state'] = tk.DISABLED  # DrawButtonをロック
+        self.PreviewButton['state'] = tk.DISABLED
+        self.filemenu.entryconfigure('CSVファイル読込', state=tk.DISABLED)
+        self.filemenu.entryconfigure('CSVファイル出力', state=tk.DISABLED)
         t = ExecTime()
 
         # CSVファイルをDataFrameとして読み込み、self.dfに結合する
         self.df = pd.DataFrame()
         for idx, filename in enumerate(csv_filenames):
-            self.MsgFrame.write(f' [{idx+1}/{len(csv_filenames)}]：{filename} ... ')
+            self.MsgFrame.write(f' [{idx+1}/{len(csv_filenames)}] "{filename}" ... ')
             df = pd.read_csv(
                 filename,
                 encoding='SHIFT-JIS',                       # 文字コードを指定
@@ -453,15 +471,17 @@ class ButtonFrame(tk.Frame):
             self.df = pd.concat([self.df, df])
             self.MsgFrame.write(f'{t.laptime:.3f} sec\n')
 
-        self.MsgFrame.write(f'{now()} ファイル読込完了\n')
+        self.MsgFrame.write(f'{now()} CSVファイル読込完了\n')
 
         # カレントディレクトの変更
         os.chdir(os.path.dirname(csv_filenames[0]))
-        self.MsgFrame.write(f' ファイル出力先：{os.getcwd()}\n')
+        # self.MsgFrame.write(f' ファイル出力先：{os.getcwd()}\n')
         # 重複行を削除する
         self.df.drop_duplicates(inplace=True)
         # インデックス順（日時）でソートする
         self.df.sort_index(inplace=True)
+        # 1行目を削除する（取得値が非常に大きい場合があるため）
+        self.df.drop(df.index[0], inplace=True)
         # 不正データの行を削除する
         self.df.drop(self.df.query('send == 0 & recv == 0').index, inplace=True)
         # delta_timeを計算する
@@ -485,13 +505,17 @@ class ButtonFrame(tk.Frame):
         # 期間情報設定
         self.PeriodFrame.set_values(sorted(set(self.df.index.date)))
 
-        self.ReadButton['state'] = 'normal'  # ReadButtonをロック解除
-        self.DrawButton['state'] = 'normal'  # DrawButtonをロック解除
+        self.ReadButton['state'] = tk.NORMAL  # ReadButtonをロック解除
+        self.DrawButton['state'] = tk.NORMAL  # DrawButtonをロック解除
+        self.PreviewButton['state'] = tk.NORMAL  # PreviewButtonをロック解除
+        self.filemenu.entryconfigure('CSVファイル読込', state=tk.NORMAL)
+        self.filemenu.entryconfigure('CSVファイル出力', state=tk.NORMAL)
 
-    def output_graph(self):
+        self.preview_graph()
+
+    def _resample_df(self) -> tuple:
         """
-        指定の時間でスループットを計算してCSVに吐き出す
-        グラフも表示する。
+        リサンプルしたDataFrameと各種変数を返す
         """
         rule = MEAN_TIMES[self.var_mean_time.get()]
         axis_unit = self.var_axis_unit.get()
@@ -501,7 +525,7 @@ class ButtonFrame(tk.Frame):
             df = self.df.copy()
         else:
             df = self.df.resample(rule=rule).sum()
-            df['delta_time'] = df.index.to_series().diff().dt.total_seconds()
+            # df['delta_time'] = df.index.to_series().diff().dt.total_seconds()
 
         # 指定期間を抽出
         df = df[self.var_from.get():self.var_to.get()]
@@ -521,9 +545,9 @@ class ButtonFrame(tk.Frame):
         df[recv_unit] = df['recv'] * 8 // df['delta_time'] / div_unit
         df[send_unit] = df['send'] * 8 // df['delta_time'] / div_unit
 
-        # CSVファイル出力
-        output_columns = ['delta_time', recv_unit, send_unit]
-        df[output_columns].to_csv(f'{self.target_ip}_{var_mean_time.get()}.csv', sep=',')
+        # # CSVファイル出力
+        # output_columns = ['delta_time', recv_unit, send_unit]
+        # df[output_columns].to_csv(f'{self.target_ip}_{var_mean_time.get()}.csv', sep=',')
 
         # 送受信の最大値と発生日時を調べる
         recv_max = df[recv_unit].max()
@@ -544,19 +568,17 @@ class ButtonFrame(tk.Frame):
         str1 = f'受信MAX: {recv_max_str:>{strlen_max}} {axis_unit} ({recv_max_date})'
         str2 = f'送信MAX: {send_max_str:>{strlen_max}} {axis_unit} ({send_max_date})'
 
-        # グラフ描画
-        ax = df.plot(
-            grid=True,
-            y=[recv_unit, send_unit],
-            title=f'{self.target_ip} スループット（{var_mean_time.get()}）'
-            )
+        return (df, recv_unit, send_unit, axis_unit, div_unit, str1, str2)
+
+    def _adjust_axes(self, ax, axis_unit, div_unit, r_max, s_max):
         # X軸ラベル
         ax.set_xlabel('日時')
         # Y軸ラベル
         ax.set_ylabel(axis_unit)
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: f'{x:,.1f}'))
-        ax.grid(which='major', color='gray', linestyle='--')
-        ax.grid(which='minor', color='gray', linestyle='--')
+        ax.grid(b=True, axis='y', which=tk.BOTH, color='gray', linestyle='--', alpha=0.5)
+        ax.grid(b=True, axis='x', which='major', color='gray', linestyle='-', alpha=0.9)
+        ax.grid(b=True, axis='x', which='minor', color='gray', linestyle='--', alpha=0.5)
         # Y軸のスケール
         if var_axis_type.get() == 'auto':
             ax.set_ylim(0,)
@@ -564,9 +586,60 @@ class ButtonFrame(tk.Frame):
             ax.set_ylim([0, var_axis_value.get() // div_unit])
 
         # 送受信の最大値をグラフ上にテキスト表示
-        ax.text(0.05, 0.9, str1 + '\n' + str2, family='ms gothic', transform=ax.transAxes)
+        ax.text(0.05, 0.9, r_max + '\n' + s_max, family='ms gothic', transform=ax.transAxes)
+
+    def output_graph(self):
+        """
+        指定の時間でスループットを計算してグラフ表示する
+        """
+        (df, recv_unit, send_unit, axis_unit, div_unit, r_max, s_max) = self._resample_df()
+
+        # グラフ描画
+        ax = df.plot(
+            grid=True,
+            y=[recv_unit, send_unit],
+            title=f'{self.target_ip} スループット（{var_mean_time.get()}）',
+            rot=30
+            )
+
+        # axesの見栄えを調整する
+        self._adjust_axes(ax, axis_unit, div_unit, r_max, s_max)
 
         plt.show()
+
+    def preview_graph(self):
+        """
+        グラフをプレビューする
+        """
+        (df, recv_unit, send_unit, axis_unit, div_unit, r_max, s_max) = self._resample_df()
+
+        # グラフ描画
+        ax.cla()
+        df.plot(
+            ax=ax,
+            grid=True,
+            y=[recv_unit, send_unit],
+            title=f'{self.target_ip} スループット（{var_mean_time.get()}）',
+            rot=30
+            )
+
+        # axesの見栄えを調整する
+        self._adjust_axes(ax, axis_unit, div_unit, r_max, s_max)
+
+        canvas.draw()
+
+    def output_csv(self):
+        """
+        CSVファイルを出力する
+        """
+        (df, recv_unit, send_unit, *_) = self._resample_df()
+
+        # CSVファイル出力
+        output_fname = f'{self.target_ip}_{var_mean_time.get()}.csv'
+        output_columns = ['delta_time', recv_unit, send_unit]
+        df[output_columns].to_csv(output_fname, sep=',')
+        self.MsgFrame.write(f'\n{now()} CSVファイル出力\n')
+        self.MsgFrame.write(f' "{os.path.abspath(output_fname)}"\n')
 
 
 class ExecTime():
@@ -593,8 +666,20 @@ if __name__ == '__main__':
     root = tk.Tk()
     root.withdraw()
 
+    # メニューバー
+    menubar = tk.Menu(master=root)
+    root.config(menu=menubar)
+    # File Menu
+    filemenu = tk.Menu(menubar, tearoff=0)
+    filemenu.add_command(label='CSVファイル読込')
+    filemenu.add_command(label='CSVファイル出力')
+    filemenu.add_separator()
+    filemenu.add_command(label='終了', command=quit)
+    # Add
+    menubar.add_cascade(label='ファイル', underline=0, menu=filemenu)
+
     # ウィジェット共通の変数
-    var_axis_unit = tk.StringVar(value='kbps')  # 縦軸の単位 bps / kbps / Mbps
+    var_axis_unit = tk.StringVar(value='Mbps')  # 縦軸の単位 bps / kbps / Mbps / Gbps
     var_axis_type = tk.StringVar(value='auto')  # 縦軸の指定方法 auto / fix / specified
     var_axis_value = tk.IntVar()                # 縦軸の高さ
     var_mean_time = tk.StringVar()             # 集計時間単位（n分平均）
@@ -631,11 +716,31 @@ if __name__ == '__main__':
         fileinfo_frame,
         period_frame,
         msg_frame,
+        filemenu,
         master=root,
     )
     button_frame.grid(row=4, column=0, columnspan=2, ipady=2, padx=2, pady=2)
 
-    root.title('STG Graph Plot')
+    # プレビュー表示用のcanvasの作成
+    fig = Figure()
+    ax = fig.add_subplot()
+    ax.grid(b=True, axis=tk.BOTH, which=tk.BOTH, color='gray', linestyle='--', alpha=0.5)
+    fig.subplots_adjust(top=0.9, bottom=0.19, left=0.14)
+
+    canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas.draw()
+    # toolbarを表示するときは、rowspan=4にする。非表示の場合5
+    canvas.get_tk_widget().grid(row=0, column=2, rowspan=4, sticky=tk.NSEW)
+
+    toolbar = NavigationToolbar2Tk(canvas, root, pack_toolbar=False)
+    toolbar.update()
+    toolbar.grid(row=4, column=2, sticky=tk.W)
+
+    # ファイルメニュー
+    filemenu.entryconfigure('CSVファイル読込', command=button_frame.read_stg_thread, state=tk.NORMAL)
+    filemenu.entryconfigure('CSVファイル出力', command=button_frame.output_csv, state=tk.DISABLED)
+
+    root.title(f'STG Graph Plot  ver. {__version__}')
     root.resizable(width=False, height=False)
     root.deiconify()
     root.mainloop()
