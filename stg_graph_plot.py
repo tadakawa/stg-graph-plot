@@ -8,12 +8,14 @@ import tkinter.scrolledtext as tkst
 import tkinter.ttk as ttk
 from tkinter import filedialog, messagebox
 
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 # from matplotlib.backend_bases import key_press_handler
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
                                                NavigationToolbar2Tk)
 from matplotlib.figure import Figure
+from matplotlib.ticker import AutoMinorLocator
 
 __version__ = '1.1.0'
 plt.style.use('ggplot')
@@ -463,11 +465,13 @@ class ButtonFrame(tk.Frame):
                 encoding='SHIFT-JIS',                       # 文字コードを指定
                 header=1,                                   # 0行目（最初の行）を読み飛ばす
                 names=['date', 'uptime', 'recv', 'send'],   # カラム名を設定
-                usecols=[0, 2, 3],                          # 'uptime' は取り込まない
             )
-            # STGのバグでAugがAvgになっているので、置換して日時認識しインデックスにする
+            # STGのバグでAugがAvgになっているので、置換して日時認識する
             df['date'] = pd.to_datetime(df['date'].str.replace('Avg', 'Aug'))
-            df.set_index('date', inplace=True)
+            # uptimeが0の行は読み取り失敗のため削除する
+            df.drop(df.query('uptime == 0').index, inplace=True)
+            # uptimeの列を削除する
+            df.drop('uptime', axis=1, inplace=True)
             self.df = pd.concat([self.df, df])
             self.MsgFrame.write(f'{t.laptime:.3f} sec\n')
 
@@ -478,12 +482,12 @@ class ButtonFrame(tk.Frame):
         # self.MsgFrame.write(f' ファイル出力先：{os.getcwd()}\n')
         # 重複行を削除する
         self.df.drop_duplicates(inplace=True)
+        # 'date'をインデックスにする
+        self.df.set_index('date', inplace=True)
         # インデックス順（日時）でソートする
         self.df.sort_index(inplace=True)
         # 1行目を削除する（取得値が非常に大きい場合があるため）
-        self.df.drop(df.index[0], inplace=True)
-        # 不正データの行を削除する
-        self.df.drop(self.df.query('send == 0 & recv == 0').index, inplace=True)
+        self.df.drop(self.df.index[0], inplace=True)
         # delta_timeを計算する
         self.df['delta_time'] = self.df.index.to_series().diff().dt.total_seconds()
 
@@ -573,12 +577,15 @@ class ButtonFrame(tk.Frame):
     def _adjust_axes(self, ax, axis_unit, div_unit, r_max, s_max):
         # X軸ラベル
         ax.set_xlabel('日時')
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+        ax.xaxis.set_minor_locator(AutoMinorLocator(6))
         # Y軸ラベル
         ax.set_ylabel(axis_unit)
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: f'{x:,.1f}'))
-        ax.grid(b=True, axis='y', which=tk.BOTH, color='gray', linestyle='--', alpha=0.5)
-        ax.grid(b=True, axis='x', which='major', color='gray', linestyle='-', alpha=0.9)
-        ax.grid(b=True, axis='x', which='minor', color='gray', linestyle='--', alpha=0.5)
+        ax.yaxis.set_minor_locator(AutoMinorLocator())
+        # グリッド線
+        ax.grid(b=True, axis='both', which='major', color='gray', linestyle='--', alpha=0.9)
+        ax.grid(b=True, axis='both', which='minor', color='gray', linestyle='--', alpha=0.2)
         # Y軸のスケール
         if var_axis_type.get() == 'auto':
             ax.set_ylim(0,)
@@ -599,7 +606,8 @@ class ButtonFrame(tk.Frame):
             grid=True,
             y=[recv_unit, send_unit],
             title=f'{self.target_ip} スループット（{var_mean_time.get()}）',
-            rot=30
+            rot=30,
+            x_compat=True
             )
 
         # axesの見栄えを調整する
@@ -620,7 +628,8 @@ class ButtonFrame(tk.Frame):
             grid=True,
             y=[recv_unit, send_unit],
             title=f'{self.target_ip} スループット（{var_mean_time.get()}）',
-            rot=30
+            rot=30,
+            x_compat=True
             )
 
         # axesの見栄えを調整する
@@ -724,7 +733,7 @@ if __name__ == '__main__':
     # プレビュー表示用のcanvasの作成
     fig = Figure()
     ax = fig.add_subplot()
-    ax.grid(b=True, axis=tk.BOTH, which=tk.BOTH, color='gray', linestyle='--', alpha=0.5)
+    ax.grid(b=True, axis='both', which='both', color='gray', linestyle='--', alpha=0.5)
     fig.subplots_adjust(top=0.9, bottom=0.19, left=0.14)
 
     canvas = FigureCanvasTkAgg(fig, master=root)
