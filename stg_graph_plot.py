@@ -683,7 +683,7 @@ if __name__ == '__main__':
     filemenu.add_command(label='CSVファイル読込')
     filemenu.add_command(label='CSVファイル出力')
     filemenu.add_separator()
-    filemenu.add_command(label='終了', command=quit)
+    filemenu.add_command(label='終了', command=root.destroy)
     # Add
     menubar.add_cascade(label='ファイル', underline=0, menu=filemenu)
 
