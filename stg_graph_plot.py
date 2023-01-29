@@ -17,7 +17,7 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg,
 from matplotlib.figure import Figure
 from matplotlib.ticker import AutoMinorLocator
 
-__version__ = '1.1.0'
+__version__ = '1.1.1'
 plt.style.use('ggplot')
 font = {'family': 'meiryo'}
 plt.rc('font', **font)
@@ -586,8 +586,8 @@ class ButtonFrame(tk.Frame):
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: f'{x:,.1f}'))
         ax.yaxis.set_minor_locator(AutoMinorLocator())
         # グリッド線
-        ax.grid(b=True, axis='both', which='major', color='gray', linestyle='--', alpha=0.9)
-        ax.grid(b=True, axis='both', which='minor', color='gray', linestyle='--', alpha=0.2)
+        ax.grid(visible=True, axis='both', which='major', color='gray', linestyle='--', alpha=0.9)
+        ax.grid(visible=True, axis='both', which='minor', color='gray', linestyle='--', alpha=0.2)
         # Y軸のスケール
         if var_axis_type.get() == 'auto':
             ax.set_ylim(0,)
@@ -735,7 +735,7 @@ if __name__ == '__main__':
     # プレビュー表示用のcanvasの作成
     fig = Figure()
     ax = fig.add_subplot()
-    ax.grid(b=True, axis='both', which='both', color='gray', linestyle='--', alpha=0.5)
+    ax.grid(visible=True, axis='both', which='both', color='gray', linestyle='--', alpha=0.5)
     fig.subplots_adjust(top=0.9, bottom=0.19, left=0.14)
 
     canvas = FigureCanvasTkAgg(fig, master=root)
