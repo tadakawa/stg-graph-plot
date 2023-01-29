@@ -467,7 +467,9 @@ class ButtonFrame(tk.Frame):
                 names=['date', 'uptime', 'recv', 'send'],   # カラム名を設定
             )
             # STGのバグでAugがAvgになっているので、置換して日時認識する
-            df['date'] = pd.to_datetime(df['date'].str.replace('Avg', 'Aug'))
+            df['date'] = pd.to_datetime(
+                df['date'].str.replace('Avg', 'Aug'), format="%Y-%b-%d %H:%M:%S.%f"
+            )
             # uptimeが0の行は読み取り失敗のため削除する
             df.drop(df.query('uptime == 0').index, inplace=True)
             # uptimeの列を削除する
